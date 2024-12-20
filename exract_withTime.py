@@ -63,65 +63,109 @@ def scrape_articles(url):
 
     try:
         while True:
+            
             wait.until(EC.presence_of_element_located((By.CLASS_NAME, 'display-card')))
+            
+            # Ceollect the article links and image URLs from the dc-img-link
+            elements = driver.find_elements(By.CLASS_NAME, 'dc-img-link')
+            article_links = [element.get_attribute('href') for element in elements]
+            image_elements = driver.find_elements(By.CLASS_NAME, 'dc-img-link')
+            image_urls = [element.find_element(By.TAG_NAME, 'img').get_attribute('src') for element in image_elements]
+            datetime_element = driver.find_elements(By.CLASS_NAME, 'display-card-date') #.get_attribute('datetime')for element in image_elements]
+            article_datetime = [date.get_attribute('datetime') for date in datetime_element]
+            print('-1')
+            # Loop through the collected article links and image URLs
+            for i, link in enumerate(article_links):
 
-            # Collect the article elements
-            articles = driver.find_elements(By.CLASS_NAME, 'display-card')
-            for article in articles:
-                try:
-                    # Extract article datetime
-                    datetime_element = article.find_element(By.CLASS_NAME, 'display-card-date')
-                    article_datetime = datetime_element.get_attribute('datetime')
-                    print(article_datetime)
+                print('0')
+                time.sleep(5)
+                print(is_recent_article(article_datetime[i], max_days=4))
+                print(article_datetime)
 
-                    # Check if the article is recent
-                    if is_recent_article(article_datetime , max_days= 4):
-                        # Extract the article link
-                        link_element = article.find_element(By.CLASS_NAME, 'dc-img-link')
-                        link = link_element.get_attribute('href')
-                        
 
-                        # Get the article title
-                        title = article.find_element(By.CLASS_NAME, 'threads-prompt-title').text.strip()
 
-                        # Extract the image URL
-                        image_url = link_element.find_element(By.TAG_NAME, 'img').get_attribute('src')
 
-                        # Navigate to the article page for further content and summary
-                        driver.get(link)
-                        time.sleep(2)
+                if is_recent_article(article_datetime[i] , max_days= 4):
+                    driver.get(link)                 
+                                                   
+                    time.sleep(5)
 
-                        # Scrape the content
+                    # Scrape the article content
+                    try:
+                        title_element = wait.until(EC.presence_of_element_located((By.CLASS_NAME, 'threads-prompt-title')))
+                        title = title_element.text if title_element else "No Title"
+                    except Exception as e:
+                        print(f"Could not find article title: {e}")
                         try:
-                            body = driver.find_element(By.CLASS_NAME, 'w-thread-prompt-content')
+                            title_element = wait.until(EC.presence_of_element_located((By.CLASS_NAME, 'article-header-title')))
+                            title = title_element.text if title_element else "No Title"
+                        except Exception as e:
+                            print(f"Could not find article title with old class: {e}")
+                            title = "No Title"
+
+                    # Scrape the content 
+                    try:
+                        body = driver.find_element(By.CLASS_NAME, 'w-thread-prompt-content')
+                        content = body.text.strip() if body else "No Content"
+                        print("Extracted content.")
+                    except Exception as e:
+                        content = "No Content"
+                        print(f"Could not find article content (new class): {e}")
+                        try:
+                            body = driver.find_element(By.CLASS_NAME, 'content-block-regular')
                             content = body.text.strip() if body else "No Content"
-                        except:
+                            print("Extracted content from old class.")
+                        except Exception as e:
                             content = "No Content"
-
-                        # Extract article summary
+                            print(f"Could not find article content (old class): {e}")
+                    
+                    # Extract article summary
+                    try:
+                        summary_elements = driver.find_elements(By.CSS_SELECTOR, 'div.custom_block-content.key-points li')
+                        summary = ''.join([summary.text.strip() for summary in summary_elements])
+                    except Exception as e:
+                        summary = "No Summary"
+                        print(f"Could not find article summary with new class: {e}")
                         try:
-                            summary_elements = driver.find_elements(By.CSS_SELECTOR, 'div.custom_block-content.key-points li')
+                            summary_elements = driver.find_elements(By.CSS_SELECTOR, 'div.key-points li')
                             summary = ''.join([summary.text.strip() for summary in summary_elements])
-                        except:
+                        except Exception as e:
                             summary = "No Summary"
+                            print(f"Could not find article summary with old class: {e}")
 
-                        # Append data
+                    # Get the image
+                    image_url = image_urls[i] if i < len(image_urls) else "No Image"
+
+                    # Append data 
+                    if content:
                         df = df._append({
-                            'Article Name': title,
-                            'context': content,
-                            'summary from url': summary,
+                            'Article Name': title, 
+                            'context': content, 
+                            'summary from url': summary, 
                             'page_url': link,
                             'image_url': image_url
                         }, ignore_index=True)
+                    driver.back()    
 
-                        # Return to the search page
-                        driver.back()
-                        time.sleep(2)
+                # Go back to the main 
+                else:
+                    print('article is not recent')
+                    
 
+            print('end of the loop')
+            # Click the 'See More' button only once
+            if not see_more_clicked:
+                try:
+                    more_btn = driver.find_element(By.XPATH, '/html/body/main/section[5]/div/section/a[1]')
+                    driver.execute_script("arguments[0].click();", more_btn)
+                    time.sleep(5)
+                    see_more_clicked = True  
+                    print("Clicked 'See More' button.")
                 except Exception as e:
-                    print(f"Error processing article: {e}")
-
-            # Click the 'Next' button to go to the next page
+                    print(f"Error with 'See More' button: {e}")
+                    break
+            
+            # Click the 'Next' 
             try:
                 next_btn = driver.find_element(By.CLASS_NAME, 'next')
                 next_href = next_btn.get_attribute('href')
