@@ -1,3 +1,5 @@
+    see_more_clicked = False
+
 # Click the 'See More' button only once
             if not see_more_clicked:
                 try:
